@@ -15,6 +15,8 @@ const NETWORK_BATCH_SIZE: usize = 100;
 const LEADER_WAIT: Duration = Duration::from_secs(1);
 const ELECTION_TIMEOUT: Duration = Duration::from_secs(1);
 
+const LOG_STATUS_PERIOD: Duration = Duration::from_secs(1);
+
 pub struct OmniPaxosServer {
     id: NodeId,
     database: Database,
@@ -57,8 +59,13 @@ impl OmniPaxosServer {
             .await;
         // Main event loop with leader election
         let mut election_interval = tokio::time::interval(ELECTION_TIMEOUT);
+        let mut log_status_period = tokio::time::interval(LOG_STATUS_PERIOD);
         loop {
             tokio::select! {
+                _ = log_status_period.tick() => {
+                    // TODO: call omnipaxos to send log_status
+                    self.omnipaxos.send_log_status();
+                }
                 _ = election_interval.tick() => {
                     self.omnipaxos.tick();
                     self.send_outgoing_msgs();
@@ -191,12 +198,12 @@ impl OmniPaxosServer {
     }
 
     fn append_to_log(&mut self, from: ClientId, command_id: CommandId, kv_command: KVCommand) {
-        let command = Command {
-            client_id: from,
-            coordinator_id: self.id,
-            id: command_id,
-            kv_cmd: kv_command,
-        };
+        let command = Command::new(
+            from,
+            self.id,
+            command_id,
+            kv_command,
+        );
         self.omnipaxos
             .append(command)
             .expect("Append to Omnipaxos log failed");

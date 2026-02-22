@@ -43,21 +43,95 @@ pub mod messages {
 }
 
 pub mod kv {
-    use omnipaxos::{macros::Entry, storage::Snapshot};
+    use omnipaxos::storage::{Entry, NoSnapshot};
+    use omnipaxos::{storage::Snapshot};
     use serde::{Deserialize, Serialize};
     use std::collections::HashMap;
+    use omnipaxos::messages::RequestId;
+    use omnipaxos::messages::Timestamp;
+    use uuid::uuid;
 
     pub type CommandId = usize;
     pub type ClientId = u64;
     pub type NodeId = omnipaxos::util::NodeId;
     pub type InstanceId = NodeId;
 
-    #[derive(Debug, Clone, Entry, Serialize, Deserialize)]
+    #[derive(Debug, Clone, Serialize, Deserialize)]
     pub struct Command {
         pub client_id: ClientId,
         pub coordinator_id: NodeId,
         pub id: CommandId,
         pub kv_cmd: KVCommand,
+
+        pub deadline: Timestamp,
+        pub request_id: RequestId,
+    }
+
+    impl Command {
+        pub fn new(
+            client_id: ClientId,
+            coordinator_id: NodeId,
+            id: CommandId,
+            kv_cmd: KVCommand,
+        ) -> Self {
+            Self {
+                client_id,
+                coordinator_id,
+                id,
+                kv_cmd,
+                deadline: 0,
+                request_id: RequestId::nil(),
+            }
+        }
+    }
+
+    impl Entry for Command {
+        type Snapshot = NoSnapshot;
+
+        fn stable_encode(&self, out: &mut Vec<u8>) {
+            out.extend_from_slice(&self.client_id.to_le_bytes());
+            out.extend_from_slice(&self.coordinator_id.to_le_bytes());
+            out.extend_from_slice(&(self.id as u64).to_le_bytes());
+
+            match &self.kv_cmd {
+                KVCommand::Put(key, value) => {
+                    out.push(0);
+                    out.extend_from_slice(&(key.len() as u64).to_le_bytes());
+                    out.extend_from_slice(key.as_bytes());
+                    out.extend_from_slice(&(value.len() as u64).to_le_bytes());
+                    out.extend_from_slice(value.as_bytes());
+                }
+                KVCommand::Delete(key) => {
+                    out.push(1);
+                    out.extend_from_slice(&(key.len() as u64).to_le_bytes());
+                    out.extend_from_slice(key.as_bytes());
+                }
+                KVCommand::Get(key) => {
+                    out.push(2);
+                    out.extend_from_slice(&(key.len() as u64).to_le_bytes());
+                    out.extend_from_slice(key.as_bytes());
+                }
+            }
+
+            out.extend_from_slice(&self.deadline.to_le_bytes());
+            out.extend(self.request_id.to_bytes_le());
+        }
+
+        fn get_deadline(&self) -> u64 {
+            self.deadline
+        }
+
+        fn set_deadline(&mut self, _deadline: u64) {
+            self.deadline = _deadline;
+        }
+
+        fn get_request_id(&self) -> omnipaxos::messages::RequestId {
+            omnipaxos::messages::RequestId::new_v4()
+        }
+
+        fn set_request_id(&mut self, _request_id: omnipaxos::messages::RequestId) {
+            // no-op for testing
+        }
     }
 
     #[derive(Debug, Clone, Serialize, Deserialize)]
