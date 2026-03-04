@@ -43,7 +43,10 @@ pub mod messages {
 }
 
 pub mod kv {
-    use omnipaxos::{macros::Entry, storage::Snapshot};
+    use omnipaxos::{
+        messages::{RequestId, Timestamp},
+        storage::{Entry, NoSnapshot, Snapshot},
+    };
     use serde::{Deserialize, Serialize};
     use std::collections::HashMap;
 
@@ -52,12 +55,73 @@ pub mod kv {
     pub type NodeId = omnipaxos::util::NodeId;
     pub type InstanceId = NodeId;
 
-    #[derive(Debug, Clone, Entry, Serialize, Deserialize)]
+    #[derive(Debug, Clone, Serialize, Deserialize)]
     pub struct Command {
         pub client_id: ClientId,
         pub coordinator_id: NodeId,
         pub id: CommandId,
         pub kv_cmd: KVCommand,
+        pub deadline: Timestamp,
+        pub request_id: RequestId,
+        pub proxy_id: NodeId,
+    }
+
+    impl Entry for Command {
+        type Snapshot = NoSnapshot;
+
+        fn get_deadline(&self) -> Timestamp {
+            self.deadline
+        }
+
+        fn set_deadline(&mut self, deadline: Timestamp) {
+            self.deadline = deadline;
+        }
+
+        fn get_request_id(&self) -> RequestId {
+            self.request_id
+        }
+
+        fn set_request_id(&mut self, request_id: RequestId) {
+            self.request_id = request_id;
+        }
+
+        fn get_nezha_proxy_id(&self) -> NodeId {
+            self.proxy_id
+        }
+
+        fn set_nezha_proxy_id(&mut self, proxy_id: NodeId) {
+            self.proxy_id = proxy_id;
+        }
+
+        fn stable_encode(&self, out: &mut Vec<u8>) {
+            out.extend_from_slice(&self.client_id.to_le_bytes());
+            out.extend_from_slice(&self.coordinator_id.to_le_bytes());
+            out.extend_from_slice(&(self.id as u64).to_le_bytes());
+
+            match &self.kv_cmd {
+                KVCommand::Put(key, value) => {
+                    out.push(0);
+                    out.extend_from_slice(&(key.len() as u64).to_le_bytes());
+                    out.extend_from_slice(key.as_bytes());
+                    out.extend_from_slice(&(value.len() as u64).to_le_bytes());
+                    out.extend_from_slice(value.as_bytes());
+                }
+                KVCommand::Delete(key) => {
+                    out.push(1);
+                    out.extend_from_slice(&(key.len() as u64).to_le_bytes());
+                    out.extend_from_slice(key.as_bytes());
+                }
+                KVCommand::Get(key) => {
+                    out.push(2);
+                    out.extend_from_slice(&(key.len() as u64).to_le_bytes());
+                    out.extend_from_slice(key.as_bytes());
+                }
+            }
+
+            out.extend_from_slice(&self.deadline.to_le_bytes());
+            out.extend(self.request_id.to_bytes_le());
+            out.extend_from_slice(&self.proxy_id.to_le_bytes());
+        }
     }
 
     #[derive(Debug, Clone, Serialize, Deserialize)]

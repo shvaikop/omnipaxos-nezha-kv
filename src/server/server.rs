@@ -2,7 +2,7 @@ use crate::{configs::OmniPaxosKVConfig, database::Database, network::Network};
 use chrono::Utc;
 use log::*;
 use omnipaxos::{
-    messages::Message,
+    messages::{Message, RequestId},
     util::{LogEntry, NodeId},
     OmniPaxos, OmniPaxosConfig,
 };
@@ -14,6 +14,8 @@ type OmniPaxosInstance = OmniPaxos<Command, MemoryStorage<Command>>;
 const NETWORK_BATCH_SIZE: usize = 100;
 const LEADER_WAIT: Duration = Duration::from_secs(1);
 const ELECTION_TIMEOUT: Duration = Duration::from_secs(1);
+const LOG_STATUS_PERIOD: Duration = Duration::from_secs(1);
+const EARLY_BUFFER_PERIOD: Duration = Duration::from_millis(300);
 
 pub struct OmniPaxosServer {
     id: NodeId,
@@ -57,11 +59,19 @@ impl OmniPaxosServer {
             .await;
         // Main event loop with leader election
         let mut election_interval = tokio::time::interval(ELECTION_TIMEOUT);
+        let mut log_status_period = tokio::time::interval(LOG_STATUS_PERIOD);
+        let mut early_buffer_period = tokio::time::interval(EARLY_BUFFER_PERIOD);
         loop {
             tokio::select! {
                 _ = election_interval.tick() => {
                     self.omnipaxos.tick();
                     self.send_outgoing_msgs();
+                },
+                _ = log_status_period.tick() => {
+                    self.omnipaxos.send_log_status();
+                },
+                _ = early_buffer_period.tick() => {
+                    self.omnipaxos.process_early_buffer();
                 },
                 _ = self.network.cluster_messages.recv_many(&mut cluster_msg_buf, NETWORK_BATCH_SIZE) => {
                     self.handle_cluster_messages(&mut cluster_msg_buf).await;
@@ -111,6 +121,7 @@ impl OmniPaxosServer {
         }
     }
 
+    // TODO: replace with handle_committed_entries (or something) once that PR is merged
     fn handle_decided_entries(&mut self) {
         // TODO: Can use a read_raw here to avoid allocation
         let new_decided_idx = self.omnipaxos.get_decided_idx();
@@ -196,6 +207,10 @@ impl OmniPaxosServer {
             coordinator_id: self.id,
             id: command_id,
             kv_cmd: kv_command,
+            // placeholders- will be set by proxy
+            deadline: 0,
+            request_id: RequestId::nil(),
+            proxy_id: 0,
         };
         self.omnipaxos
             .append(command)
