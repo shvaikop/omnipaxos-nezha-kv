@@ -25,3 +25,32 @@ Documentation on the GCP python client API seems to be scarce. The best resource
      - `uv run benchmarks.py` to run the example benchmark
      - `uv run graph_experiment.py` to graph benchmark data
 
+## Run Locally with Docker
+This mode does not require GCP. It starts server/client Docker containers on a local Docker network and writes logs to `./logs`.
+
+### Prerequisites
+- Docker
+- uv
+- `omnipaxos-nezha-kv` and `omnipaxos-nezha` checked out as sibling directories (both under the same parent directory)
+
+### Commands
+From `benchmarks/`:
+
+```bash
+# Rebuild local images once, then run local benchmark workload
+./scripts/run-local-benchmark.sh --rebuild-images --runs 1
+
+# Or run directly without the wrapper script
+uv run local_benchmarks.py --rebuild-images --runs 1
+```
+
+### Output
+Logs are stored in:
+- `./logs/local-example-experiment/MajorityQuorum/run-<n>/`
+- `./logs/local-example-experiment/FlexQuorum/run-<n>/`
+
+You can graph the results with:
+
+```bash
+uv run graph_experiment.py
+```

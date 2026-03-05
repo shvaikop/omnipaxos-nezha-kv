@@ -1,30 +1,24 @@
-FROM rust:latest as chef
+FROM rust:latest AS builder
 
 # Stop if a command fails
 RUN set -eux
 
-# Only fetch crates.io index for used crates
+# Faster crates.io access
 ENV CARGO_REGISTRIES_CRATES_IO_PROTOCOL=sparse
 
-# cargo-chef will be cached from the second build onwards
-RUN cargo install cargo-chef
 WORKDIR /app
 
-FROM chef AS planner
-COPY . .
-RUN cargo chef prepare --recipe-path recipe.json
+# Copy both repositories
+COPY omnipaxos-nezha /app/omnipaxos-nezha
+COPY omnipaxos-nezha-kv /app/omnipaxos-nezha-kv
 
-FROM chef AS builder
-COPY --from=planner /app/recipe.json recipe.json
-# Build dependencies - this is the caching Docker layer!
-RUN cargo chef cook --release --recipe-path recipe.json
-
-# Build application
-COPY . .
+# Build the server
+WORKDIR /app/omnipaxos-nezha-kv
 RUN cargo build --release --bin server
 
 FROM debian:bookworm-slim AS runtime
 WORKDIR /app
-COPY --from=builder /app/target/release/server /usr/local/bin
+COPY --from=builder /app/omnipaxos-nezha-kv/target/release/server /usr/local/bin
 EXPOSE 8000
-ENTRYPOINT ["/usr/local/bin/server"]
+# Keep container alive for debugging
+ENTRYPOINT ["sleep", "infinity"]
