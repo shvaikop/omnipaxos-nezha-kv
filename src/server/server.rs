@@ -22,7 +22,7 @@ pub struct OmniPaxosServer {
     database: Database,
     network: Network,
     omnipaxos: OmniPaxosInstance,
-    current_decided_idx: usize,
+    current_committed_idx: usize,
     omnipaxos_msg_buffer: Vec<Message<Command>>,
     config: OmniPaxosKVConfig,
     peers: Vec<NodeId>,
@@ -42,7 +42,7 @@ impl OmniPaxosServer {
             database: Database::new(),
             network,
             omnipaxos,
-            current_decided_idx: 0,
+            current_committed_idx: 0,
             omnipaxos_msg_buffer,
             peers: config.get_peers(config.local.server_id),
             config,
@@ -121,25 +121,26 @@ impl OmniPaxosServer {
         }
     }
 
-    // TODO: replace with handle_committed_entries (or something) once that PR is merged
-    fn handle_decided_entries(&mut self) {
+    fn handle_committed_entries(&mut self) {
         // TODO: Can use a read_raw here to avoid allocation
-        let new_decided_idx = self.omnipaxos.get_decided_idx();
-        if self.current_decided_idx < new_decided_idx {
-            let decided_entries = self
+        let new_committed_idx = self.omnipaxos.get_committed_idx();
+        if self.current_committed_idx < new_committed_idx {
+            let committed_entries = self
                 .omnipaxos
-                .read_decided_suffix(self.current_decided_idx)
+                .read_committed_suffix(self.current_committed_idx)
                 .unwrap();
-            self.current_decided_idx = new_decided_idx;
-            debug!("Decided {new_decided_idx}");
-            let decided_commands = decided_entries
+            self.current_committed_idx = new_committed_idx;
+            debug!("Committed {new_committed_idx}");
+            let committed_commands = committed_entries
                 .into_iter()
                 .filter_map(|e| match e {
                     LogEntry::Decided(cmd) => Some(cmd),
+                    // TODO- remove below once we add LogEntry::Committed type
+                    LogEntry::Undecided(cmd) => Some(cmd),
                     _ => unreachable!(),
                 })
                 .collect();
-            self.update_database_and_respond(decided_commands);
+            self.update_database_and_respond(committed_commands);
         }
     }
 
@@ -188,7 +189,7 @@ impl OmniPaxosServer {
             match message {
                 ClusterMessage::OmniPaxosMessage(m) => {
                     self.omnipaxos.handle_incoming(m);
-                    self.handle_decided_entries();
+                    self.handle_committed_entries();
                 }
                 ClusterMessage::LeaderStartSignal(start_time) => {
                     debug!("Received start message from peer {from}");
