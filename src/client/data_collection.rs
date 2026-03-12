@@ -2,16 +2,36 @@ use std::{fs::File, io::Write};
 
 use chrono::Utc;
 use csv::Writer;
-use omnipaxos_kv::common::{kv::CommandId, utils::Timestamp};
+use omnipaxos_kv::common::{
+    kv::{ClientId, CommandId, NodeId},
+    utils::Timestamp,
+};
 use serde::Serialize;
 
 use crate::configs::ClientConfig;
 
-#[derive(Debug, Serialize, Clone, Copy)]
+#[derive(Debug, Serialize, Clone)]
+enum OpType {
+    #[serde(rename = "read")]
+    Read,
+    #[serde(rename = "write")]
+    Write,
+}
+
+// Example CSV format:
+// client,op_id,req_time,res_time,op_type,key,value,result
+// c1,17,1772727389932,1772727390936,write,x,42,ok
+// c1,18,1772727389942,1772727390936,read,x,,42
+#[derive(Debug, Serialize, Clone)]
 struct RequestData {
-    request_time: Timestamp,
-    write: bool,
-    response_time: Option<Timestamp>,
+    client: NodeId,
+    op_id: CommandId,
+    req_time: Timestamp,
+    res_time: Option<Timestamp>,
+    op_type: OpType,
+    key: String,
+    value: Option<String>,
+    result: Option<String>,
 }
 
 pub struct ClientData {
@@ -27,18 +47,35 @@ impl ClientData {
         }
     }
 
-    pub fn new_request(&mut self, is_write: bool) {
+    pub fn new_request(
+        &mut self,
+        client_id: ClientId,
+        request_id: CommandId,
+        is_write: bool,
+        key: String,
+        value: String,
+    ) {
         let data = RequestData {
-            request_time: Utc::now().timestamp_millis(),
-            write: is_write,
-            response_time: None,
+            client: client_id,
+            op_id: request_id,
+            req_time: Utc::now().timestamp_millis(),
+            res_time: None, // Will be set when response is received
+            op_type: if is_write {
+                OpType::Write
+            } else {
+                OpType::Read
+            },
+            key,
+            value: if is_write { Some(value) } else { None },
+            result: None, // Will be replaced with actual result if read operation, or "ok" if write operation when response is received
         };
         self.request_data.push(data);
     }
 
-    pub fn new_response(&mut self, command_id: CommandId) {
+    pub fn new_response(&mut self, req_index: usize, result: Option<String>) {
         let response_time = Utc::now().timestamp_millis();
-        self.request_data[command_id].response_time = Some(response_time);
+        self.request_data[req_index].res_time = Some(response_time);
+        self.request_data[req_index].result = result;
         self.response_count += 1;
     }
 

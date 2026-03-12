@@ -16,6 +16,7 @@ pub struct Client {
     active_server: NodeId,
     final_request_count: Option<usize>,
     next_request_id: usize,
+    num_clients: usize,
 }
 
 impl Client {
@@ -25,6 +26,8 @@ impl Client {
             NETWORK_BATCH_SIZE,
         )
         .await;
+        let start_id = (config.server_id - 1) as usize;
+        let num_clients = config.num_clients;
         Client {
             id: config.server_id,
             network,
@@ -32,7 +35,8 @@ impl Client {
             active_server: config.server_id,
             config,
             final_request_count: None,
-            next_request_id: 0,
+            next_request_id: start_id,
+            num_clients,
         }
     }
 
@@ -109,24 +113,33 @@ impl Client {
         debug!("Recieved {msg:?}");
         match msg {
             ServerMessage::StartSignal(_) => (),
-            server_response => {
-                let cmd_id = server_response.command_id();
-                self.client_data.new_response(cmd_id);
+            // cmd_id is global across clients, so divide by num_clients to get the correct index for this client's data in each case
+            // e.g. three clients, client 1 sends 0, 3, 6, ... so request_id 6 will be at 6 / 3 = 2 in client 1's data vector
+            ServerMessage::Read(cmd_id, value) => {
+                self.client_data
+                    .new_response(cmd_id / self.num_clients, value);
+            }
+            ServerMessage::Write(cmd_id) => {
+                self.client_data
+                    .new_response(cmd_id / self.num_clients, Some("ok".to_string()));
             }
         }
     }
 
     async fn send_request(&mut self, is_write: bool) {
-        let key = self.next_request_id.to_string();
+        let mut rng = rand::thread_rng();
+        let key = rng.gen_range(0..=5).to_string();
+        let value = rng.gen_range(0..=100).to_string();
         let cmd = match is_write {
-            true => KVCommand::Put(key.clone(), key),
-            false => KVCommand::Get(key),
+            true => KVCommand::Put(key.clone(), value.clone()),
+            false => KVCommand::Get(key.clone()),
         };
         let request = ClientMessage::Append(self.next_request_id, cmd);
         debug!("Sending {request:?}");
         self.network.send(self.active_server, request).await;
-        self.client_data.new_request(is_write);
-        self.next_request_id += 1;
+        self.client_data
+            .new_request(self.id, self.next_request_id, is_write, key.clone(), value);
+        self.next_request_id += self.num_clients; // e.g. if 3 clients, client 1 sends 0, 3, 6... client 2 sends 1, 4, 7... client 3 sends 2, 5, 8...
     }
 
     fn run_finished(&self) -> bool {
