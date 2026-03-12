@@ -30,16 +30,6 @@ pub mod messages {
         Read(CommandId, Option<String>),
         StartSignal(Timestamp),
     }
-
-    impl ServerMessage {
-        pub fn command_id(&self) -> CommandId {
-            match self {
-                ServerMessage::Write(id) => *id,
-                ServerMessage::Read(id, _) => *id,
-                ServerMessage::StartSignal(_) => unimplemented!(),
-            }
-        }
-    }
 }
 
 pub mod kv {
