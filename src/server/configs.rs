@@ -24,6 +24,9 @@ pub struct LocalConfig {
     pub listen_port: u16,
     pub num_clients: usize,
     pub output_filepath: String,
+    pub clock_uncertainty: u64,
+    pub clock_drift: i64,
+    pub clock_sync_interval: u64,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -43,6 +46,9 @@ impl Into<OmniPaxosConfig> for OmniPaxosKVConfig {
         };
         let server_config = OmnipaxosServerConfig {
             pid: self.local.server_id,
+            clock_uncertainty: self.local.clock_uncertainty,
+            clock_drift: self.local.clock_drift,
+            clock_sync_interval: self.local.clock_sync_interval,
             ..Default::default()
         };
         OmniPaxosConfig {

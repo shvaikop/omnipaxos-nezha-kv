@@ -1,6 +1,22 @@
 location = "local-3"
 server_id = 3
-num_clients = 0 # Hardcoded number of client connections to wait for
+num_clients = 0                          # Hardcoded number of client connections to wait for
 listen_address = "127.0.0.1"
 listen_port = 8003
 output_filepath = "./logs/server-3.json"
+
+# Nezha configuration parameters
+# High quality: ±10μs uncertainty, 1ms sync interval
+clock_uncertainty = 10
+clock_drift = 50
+clock_sync_interval = 1000
+
+# Medium quality: ±100μs uncertainty, 10ms sync interval
+# clock_uncertainty = 100
+# clock_drift = 100
+# clock_sync_interval = 10000   # 10000μs = 10ms
+
+# Low quality: ±1ms uncertainty, 100ms sync interval
+# clock_uncertainty = 1000
+# clock_drift = 200
+# clock_sync_interval = 100000  # 100000μs = 100ms
