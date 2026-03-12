@@ -782,6 +782,7 @@ dependencies = [
  "blake3",
  "hex",
  "omnipaxos_macros",
+ "rand",
  "serde",
  "slog",
  "slog-async",
