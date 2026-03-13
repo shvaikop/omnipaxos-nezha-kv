@@ -135,8 +135,7 @@ impl OmniPaxosServer {
                 .into_iter()
                 .filter_map(|e| match e {
                     LogEntry::Decided(cmd) => Some(cmd),
-                    // TODO- remove below once we add LogEntry::Committed type
-                    LogEntry::Undecided(cmd) => Some(cmd),
+                    LogEntry::Committed(cmd) => Some(cmd),
                     _ => unreachable!(),
                 })
                 .collect();
