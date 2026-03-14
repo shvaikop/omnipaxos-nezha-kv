@@ -27,6 +27,9 @@ class LocalServerConfig:
     location: str
     rust_log: str
     num_clients: int
+    clock_uncertainty: int
+    clock_drift: int
+    clock_sync_interval: int
 
 
 @dataclass(frozen=True)
@@ -35,6 +38,7 @@ class LocalClientConfig:
     server_id: int
     location: str
     rust_log: str
+    num_clients: int
     requests: list[RequestInterval]
 
 
@@ -50,6 +54,10 @@ class LocalClusterConfig:
     client_image: str
     listen_port: int
 
+# the default clock parameters 
+DEFAULT_CLOCK_UNCERTAINTY = 10
+DEFAULT_CLOCK_DRIFT = 50
+DEFAULT_CLOCK_SYNC_INTERVAL = 1000
 
 class LocalDockerCluster:
     def __init__(self, cluster_config: LocalClusterConfig) -> None:
@@ -181,6 +189,9 @@ class LocalDockerCluster:
             "listen_address": "0.0.0.0",
             "listen_port": self._cluster_config.listen_port,
             "num_clients": config.num_clients,
+            "clock_uncertainty": config.clock_uncertainty,
+            "clock_drift": config.clock_drift,
+            "clock_sync_interval": config.clock_sync_interval,
             "output_filepath": str(logs_dir / f"server-{config.server_id}.json"),
         }
         return toml.dumps(cfg)
@@ -192,6 +203,7 @@ class LocalDockerCluster:
             "server_address": (
                 f"{self._server_container_name(config.server_id)}:{self._cluster_config.listen_port}"
             ),
+            "num_clients": config.num_clients,
             "summary_filepath": str(logs_dir / f"client-{config.client_id}.json"),
             "output_filepath": str(logs_dir / f"client-{config.client_id}.csv"),
             "requests": [asdict(r) for r in config.requests],
@@ -441,7 +453,15 @@ class LocalDockerClusterBuilder:
         self._initial_leader: int | None = None
         self._initial_quorum: FlexibleQuorum | None = None
 
-    def server(self, server_id: int, rust_log: str = "info") -> LocalDockerClusterBuilder:
+    def server(
+        self,
+        server_id: int,
+        rust_log: str = "info",
+        *,
+        clock_uncertainty: int = DEFAULT_CLOCK_UNCERTAINTY,
+        clock_drift: int = DEFAULT_CLOCK_DRIFT,
+        clock_sync_interval: int = DEFAULT_CLOCK_SYNC_INTERVAL,
+    ) -> LocalDockerClusterBuilder:
         if server_id in self._server_configs:
             raise ValueError(f"Server {server_id} already exists")
         self._server_configs[server_id] = LocalServerConfig(
@@ -449,6 +469,9 @@ class LocalDockerClusterBuilder:
             location=f"local-{server_id}",
             rust_log=rust_log,
             num_clients=0,
+            clock_uncertainty=clock_uncertainty,
+            clock_drift=clock_drift,
+            clock_sync_interval=clock_sync_interval,
         )
         return self
 
@@ -466,6 +489,7 @@ class LocalDockerClusterBuilder:
             server_id=server_id,
             location=f"local-{client_id}",
             rust_log=rust_log,
+            num_clients=0,
             requests=requests if requests is not None else [],
         )
         return self
@@ -494,9 +518,14 @@ class LocalDockerClusterBuilder:
         for client_cfg in self._client_configs.values():
             client_count_by_server[client_cfg.server_id] += 1
 
+        total_clients = len(self._client_configs)
+
         server_configs = {
             sid: replace(cfg, num_clients=client_count_by_server[sid])
             for sid, cfg in self._server_configs.items()
+        }
+        client_configs = {
+            cid: replace(cfg, num_clients=total_clients) for cid, cfg in self._client_configs.items()
         }
 
         nodes = sorted(server_configs.keys())
@@ -511,7 +540,7 @@ class LocalDockerClusterBuilder:
             initial_leader=self._initial_leader,
             initial_flexible_quorum=self._initial_quorum,
             server_configs=server_configs,
-            client_configs=self._client_configs,
+            client_configs=client_configs,
             server_image=self._server_image,
             client_image=self._client_image,
             listen_port=self._listen_port,
