@@ -92,7 +92,7 @@ class LocalDockerCluster:
                 server_ids.append(server_id)
 
             print("[local-bench] Starting server processes")
-            self._start_server_processes(server_ids)
+            self._start_server_processes(server_ids, logs_directory)
 
             # Give servers time to establish peer links before clients start.
             time.sleep(2)
@@ -109,7 +109,7 @@ class LocalDockerCluster:
                 client_ids.append(client_id)
 
             print("[local-bench] Starting client processes")
-            client_processes = self._start_client_processes(client_ids)
+            client_processes = self._start_client_processes(client_ids, logs_directory)
             print("[local-bench] Waiting for clients to finish")
             self._wait_for_clients(client_processes)
             print("[local-bench] Clients finished successfully")
@@ -235,12 +235,13 @@ class LocalDockerCluster:
         print(f"[local-bench] Started server container: {self._server_container_name(config.server_id)}")
         self._assert_container_running(self._server_container_name(config.server_id))
 
-    def _start_server_processes(self, server_ids: list[int]) -> None:
+    def _start_server_processes(self, server_ids: list[int], logs_dir: Path) -> None:
         for server_id in server_ids:
-            self._start_server_process(server_id)
+            self._start_server_process(server_id, logs_dir)
 
-    def _start_server_process(self, server_id: int) -> None:
+    def _start_server_process(self, server_id: int, logs_dir: Path) -> None:
         container_name = self._server_container_name(server_id)
+        log_file = logs_dir / f"server_{server_id}.log"
         subprocess.run(
             [
                 "docker",
@@ -249,7 +250,7 @@ class LocalDockerCluster:
                 container_name,
                 "sh",
                 "-lc",
-                "/usr/local/bin/server > /tmp/server.log 2>&1",
+                f"/usr/local/bin/server > {log_file} 2>&1",
             ],
             check=True,
             stdout=subprocess.DEVNULL,
@@ -295,11 +296,12 @@ class LocalDockerCluster:
         self._assert_container_running(self._client_container_name(config.client_id))
 
     def _start_client_processes(
-        self, client_ids: list[int]
+        self, client_ids: list[int], logs_dir: Path
     ) -> list[tuple[int, subprocess.Popen[str]]]:
         client_processes: list[tuple[int, subprocess.Popen[str]]] = []
         for client_id in client_ids:
             container_name = self._client_container_name(client_id)
+            log_file = logs_dir / f"client_{client_id}.log"
             process = subprocess.Popen(
                 [
                     "docker",
@@ -307,7 +309,7 @@ class LocalDockerCluster:
                     container_name,
                     "sh",
                     "-lc",
-                    "/usr/local/bin/client > /tmp/client.log 2>&1",
+                    f"/usr/local/bin/client > {log_file} 2>&1",
                 ],
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.PIPE,
