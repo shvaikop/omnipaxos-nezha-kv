@@ -2,7 +2,8 @@ use crate::{configs::OmniPaxosKVConfig, database::Database, network::Network};
 use chrono::Utc;
 use log::*;
 use omnipaxos::{
-    messages::{Message, RequestId},
+    // messages::{Message, RequestId},
+    messages::{Message},
     util::{LogEntry, NodeId},
     OmniPaxos, OmniPaxosConfig,
 };
@@ -67,12 +68,12 @@ impl OmniPaxosServer {
                     self.omnipaxos.tick();
                     self.send_outgoing_msgs();
                 },
-                _ = log_status_period.tick() => {
-                    self.omnipaxos.send_log_status();
-                },
-                _ = early_buffer_period.tick() => {
-                    self.omnipaxos.process_early_buffer();
-                },
+                // _ = log_status_period.tick() => {
+                //     self.omnipaxos.send_log_status();
+                // },
+                // _ = early_buffer_period.tick() => {
+                //     self.omnipaxos.process_early_buffer();
+                // },
                 _ = self.network.cluster_messages.recv_many(&mut cluster_msg_buf, NETWORK_BATCH_SIZE) => {
                     self.handle_cluster_messages(&mut cluster_msg_buf).await;
                 },
@@ -123,20 +124,18 @@ impl OmniPaxosServer {
 
     fn handle_committed_entries(&mut self) {
         // TODO: Can use a read_raw here to avoid allocation
-        let new_committed_idx = self.omnipaxos.get_committed_idx();
+        let new_committed_idx = self.omnipaxos.get_decided_idx();
         if self.current_committed_idx < new_committed_idx {
             let committed_entries = self
                 .omnipaxos
-                .read_committed_suffix(self.current_committed_idx)
+                .read_decided_suffix(self.current_committed_idx)
                 .unwrap();
             self.current_committed_idx = new_committed_idx;
             debug!("Committed {new_committed_idx}");
             let committed_commands = committed_entries
                 .into_iter()
                 .filter_map(|e| match e {
-                    LogEntry::Decided(cmd) => Some(cmd),
-                    // TODO- remove below once we add LogEntry::Committed type
-                    LogEntry::Committed(cmd) => Some(cmd),
+                    LogEntry::Decided(cmd) => Some(cmd),                   
                     _ => unreachable!(),
                 })
                 .collect();
@@ -209,9 +208,9 @@ impl OmniPaxosServer {
             id: command_id,
             kv_cmd: kv_command,
             // placeholders- will be set by proxy
-            deadline: 0,
-            request_id: RequestId::nil(),
-            proxy_id: 0,
+            // deadline: 0,
+            // request_id: RequestId::nil(),
+            // proxy_id: 0,
         };
         self.omnipaxos
             .append(command)
