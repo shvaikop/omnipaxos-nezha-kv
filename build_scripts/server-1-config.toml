@@ -7,9 +7,9 @@ output_filepath = "./logs/server-1.json"
 
 # Nezha configuration parameters
 # High quality: ±10μs uncertainty, 1ms sync interval
-clock_uncertainty = 10
-clock_drift = 50
-clock_sync_interval = 1000
+# clock_uncertainty = 10
+# clock_drift = 50
+# clock_sync_interval = 1000
 
 # Medium quality: ±100μs uncertainty, 10ms sync interval
 # clock_uncertainty = 100

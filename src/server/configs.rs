@@ -46,9 +46,9 @@ impl Into<OmniPaxosConfig> for OmniPaxosKVConfig {
         };
         let server_config = OmnipaxosServerConfig {
             pid: self.local.server_id,
-            clock_uncertainty: self.local.clock_uncertainty,
-            clock_drift: self.local.clock_drift,
-            clock_sync_interval: self.local.clock_sync_interval,
+            // clock_uncertainty: self.local.clock_uncertainty,
+            // clock_drift: self.local.clock_drift,
+            // clock_sync_interval: self.local.clock_sync_interval,
             ..Default::default()
         };
         OmniPaxosConfig {
